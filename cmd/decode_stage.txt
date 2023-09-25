@@ -1,0 +1,3 @@
+-c register_file.txt
+rtl/imm_gen.sv
+rtl/decode_stage.sv

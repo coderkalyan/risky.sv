@@ -2,9 +2,17 @@ module alu_tb ();
     logic [31:0] op_a, op_b, result;
     logic sub;
     logic [1:0] bool_op;
-    logic [2:0] op_sel;
+    logic [3:0] op_sel;
+    logic shift_dir;
 
-    alu dut (.i_op_a(op_a), .i_op_b(op_b), .i_sub(sub), .i_bool_op(bool_op), .i_op_sel(op_sel), .o_result(result));
+    alu dut (
+        .i_op_a(op_a),
+        .i_op_b(op_b),
+        .i_sub(sub),
+        .i_bool_op(bool_op),
+        .i_op_sel(op_sel),
+        .i_shift_dir(shift_dir),
+        .o_result(result));
 
     initial begin
         // addition
@@ -101,6 +109,27 @@ module alu_tb ();
         op_a = 32'b10101010; op_b = 32'b01010101; #10;
         if (result !== (op_a & op_b))
             $error("and failed: %d & %d, expected %d, got %d", op_a, op_b, op_a & op_b, result);
+
+        // lsl
+        sub = 1'bx; op_sel = 4'b1000; shift_dir = 1'b0;
+
+        op_a = 32'h0000FFFF; op_b = 6'd8; #10;
+        if (result !== 32'h00FFFF00)
+            $error("lsl failed: %d << %d, expected %d, got %d", op_a, op_b, op_a << op_b, result);
+
+        // lsr
+        sub = 1'b0; op_sel = 4'b1000; shift_dir = 1'b1;
+
+        op_a = 32'h0000FFFF; op_b = 6'd8; #10;
+        if (result !== 32'h000000FF)
+            $error("lsr failed: %d >> %d, expected %d, got %d", op_a, op_b, op_a >> op_b, result);
+
+        // asr
+        sub = 1'b1; op_sel = 4'b1000; shift_dir = 1'b1;
+
+        op_a = 32'hF000FFFF; op_b = 6'd8; #10;
+        if (result !== 32'hFFF000FF)
+            $error("asr failed: %d >>> %d, expected %d, got %d", op_a, op_b, op_a >>> op_b, result);
 
         $finish;
     end
