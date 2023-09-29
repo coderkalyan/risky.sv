@@ -20,15 +20,17 @@ module cpu (
     wire [31:0] rs1, rs2;
     wire [31:0] imm;
     wire [31:0] write_data;
+    wire write_enable;
     decode_stage decoder (
         .i_clk(i_clk),
         .i_inst(i_inst),
-        .i_write_data(write_data), // TODO
-        .i_write_enable(1'b1), // TODO
+        .i_write_data(write_data),
+        .i_write_enable(write_enable),
         .o_read1(rs1),
         .o_read2(rs2),
         .o_imm(imm)
     );
+    assign write_enable = !(decoder.ty[S] || decoder.ty[B]);
 
     assign pc_sel = (decoder.ty[B] && br_taken) || decoder.ty[J] || (opcode === 7'b1100111);
 
@@ -45,24 +47,37 @@ module cpu (
     assign op_sel[2] = (f3[2] === 1'b1) && (f3[1:0] !== 2'b01);
     assign op_sel[3] = (decoder.ty[R] || (opcode[6:4] === 3'b001)) && f3[1:0] === 2'b01;
     wire shift_dir = f3[2];
-    wire a_sel = 1'b0; // TODO
+    wire a_sel = decoder.ty[B] || decoder.ty[J]; // TODO: auipc
     wire b_sel = !decoder.ty[R];
+    wire cmp_sig = decoder.ty[B] ? f3[1] : f3[0];
 
     wire [31:0] alu_result;
-    wire cmp_lt, cmp_eq, cmp_gt;
     alu alu (
-        .i_op_a(a_sel ? 32'hxxxxxxxx : rs1), // TODO
+        .i_op_a(a_sel ? pc : rs1),
         .i_op_b(b_sel ? imm : rs2),
         .i_sub(sub),
         .i_bool_op(bool_op),
         .i_op_sel(op_sel),
         .i_shift_dir(shift_dir),
-        .i_cmp_sig(1'b0), // TODO
-        .o_result(alu_result),
+        .i_cmp_sig(cmp_sig),
+        .o_result(alu_result)
+    );
+
+    wire cmp_lt, cmp_eq, cmp_gt;
+    branch_comparator cmp (
+        .i_op_a(rs1),
+        .i_op_b(rs2),
+        .i_cmp_sig(cmp_sig),
         .o_lt(cmp_lt),
         .o_eq(cmp_eq),
         .o_gt(cmp_gt)
     );
+
+    wire [1:0] br_type = {f3[2], f3[0]};
+    assign br_taken =   (br_type === 2'b00) ? cmp_eq :
+                        (br_type === 2'b01) ? !cmp_eq :
+                        (br_type === 2'b10) ? cmp_lt :
+                        cmp_gt;
 
     // memory stage
     wire [31:0] mem_addr, mem_mask;
@@ -84,9 +99,10 @@ module cpu (
 
     // write back stage
     wire [2:0] wb_sel;
-    assign wb_sel[0] = decoder.ty[R] || (opcode[6:4] === 3'b001) || decoder.ty[U] || decoder.ty[J] || (opcode === 7'b1100111);
+    assign wb_sel[0] = decoder.ty[R] || (opcode[6:4] === 3'b001) || decoder.ty[U]; // || decoder.ty[J] || (opcode === 7'b1100111);
     assign wb_sel[1] = opcode[6:4] === 3'b000;
-    assign wb_sel[2] = 1'b0;
+    assign wb_sel[2] = decoder.ty[J] || (opcode === 7'b1100111);
     assign write_data = (wb_sel[0]) ? alu_result : 
-                        (wb_sel[1]) ? aligned_read : 32'hx;
+                        (wb_sel[1]) ? aligned_read :
+                        (pc + 4);
 endmodule

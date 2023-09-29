@@ -22,6 +22,7 @@ module cpu_tb ();
         assert_eq(dut.alu_result, 32'd8);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h4);
         assert_reg(1, 32'd8);
 
         // sra r1, r2, r3
@@ -30,6 +31,7 @@ module cpu_tb ();
         inst = 32'h403150b3;
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h8);
         assert_reg(1, 32'hFFFFFFF8);
 
         // addi r3, r18, 1234
@@ -40,6 +42,7 @@ module cpu_tb ();
         assert_eq(dut.alu.add_result, 32'd1246);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'hc);
         assert_reg(3, 32'd1246);
 
         // lw r1, 0(r0)
@@ -52,6 +55,7 @@ module cpu_tb ();
         assert_eq(dut.aligned_read, 32'hdeadbeef);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h10);
         assert_reg(1, 32'hdeadbeef);
 
         // lb r1, 3(r0)
@@ -63,6 +67,7 @@ module cpu_tb ();
         assert_eq(dut.aligned_read, 32'hffffffde);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h14);
         assert_reg(1, 32'hffffffde);
 
         // lhu r1, 2(r2)
@@ -79,6 +84,7 @@ module cpu_tb ();
         assert_eq(dut.masked_read, 32'hcafe0000);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h18);
         assert_reg(1, 32'h0000cafe);
 
         // lh r1, 2(r2)
@@ -95,6 +101,7 @@ module cpu_tb ();
         assert_eq(dut.masked_read, 32'hcafe0000);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h1c);
         assert_reg(1, 32'hffffcafe);
 
         // sw r1, 0(r2)
@@ -113,6 +120,7 @@ module cpu_tb ();
         assert_mem(8, 32'hdeadbeef);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h20);
         assert_mem(8, 32'hcafeb0ba);
 
         // sh r1, 2(r2)
@@ -127,8 +135,52 @@ module cpu_tb ();
         assert_mem(8, 32'hcafeb0ba);
         @(posedge clk);
         @(negedge clk);
+        assert_pc(32'h24);
         assert_mem(8, 32'hb0bab0ba);
-        
+
+        // beq r1, r0, 0
+        reg_set(1, 32'h0);
+        inst = 32'h00008063; #1;
+        assert_eq(dut.alu.i_op_a, 32'h24);
+        assert_eq(dut.alu.i_op_b, 32'd0);
+        assert_eq(dut.cmp_eq, 1'b1);
+        assert_eq(dut.cmp_lt, 1'b0);
+        assert_eq(dut.cmp_gt, 1'b0);
+        assert_eq(dut.br_taken, 1'b1);
+        @(posedge clk);
+        @(negedge clk);
+        assert_pc(32'h24);
+
+        // beq r1, r0, 0
+        reg_set(1, 32'hcafe);
+        inst = 32'h00008063; #1;
+        assert_eq(dut.alu.i_op_a, 32'h24);
+        assert_eq(dut.alu.i_op_b, 32'd0);
+        assert_eq(dut.cmp_eq, 1'b0);
+        assert_eq(dut.cmp_lt, 1'b0);
+        assert_eq(dut.cmp_gt, 1'b1);
+        assert_eq(dut.br_taken, 1'b0);
+        @(posedge clk);
+        @(negedge clk);
+        assert_pc(32'h28);
+
+        // jal r1, 16
+        reg_set(1, 32'hcafe);
+        inst = 32'h010000ef; #1;
+        @(posedge clk);
+        @(negedge clk);
+        assert_reg(1, 32'h2c);
+        assert_pc(32'h38);
+
+        // jalr r1, r2, 4
+        reg_set(1, 32'hcafe);
+        reg_set(2, 32'h4c);
+        inst = 32'h004100e7; #1;
+        @(posedge clk);
+        @(negedge clk);
+        assert_reg(1, 32'h3c);
+        assert_pc(32'h50);
+
         $display("test passed");
         $finish;
     end
