@@ -10,6 +10,10 @@ alu_test:
 	iverilog -g2005-sv -c cmd/alu.txt test/alu_tb.sv -o build/alu_tb
 	./build/alu_tb
 
+rw_mask_test:
+	iverilog -g2005-sv rtl/mem/rw_mask.sv test/rw_mask_tb.sv -o build/rw_mask_tb
+	./build/rw_mask_tb
+
 cpu_test:
 	iverilog -g2005-sv -c cmd/cpu.txt test/cpu_tb.sv -o build/cpu_tb
 	./build/cpu_tb

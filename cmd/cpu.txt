@@ -1,4 +1,5 @@
 -c decode_stage.txt
 -c alu.txt
 rtl/mem/parallel_dummy_dmem.sv
+rtl/mem/rw_mask.sv
 rtl/cpu.sv

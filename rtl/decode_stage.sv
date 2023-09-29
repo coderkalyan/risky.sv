@@ -12,7 +12,7 @@ module decode_stage (
     wire [4:0] rd = i_inst[11:7];
 
     wire [5:0] ty;
-    assign ty[R] = !i_inst[6] && i_inst[5] && i_inst[4] && i_inst[2];
+    assign ty[R] = (i_inst[6:4] === 3'b011) && !i_inst[2];
     assign ty[I] = (!i_inst[5] && !i_inst[2]) || (i_inst[6:4] === 3'b111) || (i_inst[4:2] === 3'b001);
     assign ty[S] = i_inst[6:4] === 3'b010;
     assign ty[B] = i_inst[6] && (i_inst[4:2] === 3'b000);
