@@ -1,5 +1,5 @@
 module register_file (
-    input wire clk,
+    input wire i_clk,
     input wire [4:0] i_write_index,
     input wire [31:0] i_write_data,
     input wire i_write_enable,
@@ -12,7 +12,7 @@ module register_file (
 );
     logic [31:0] q [30:0]; // 31x 32-bit registers (0 register doesn't need to exist)
     
-    always @(posedge clk) begin
+    always @(posedge i_clk) begin
         if (i_write_enable && (i_write_index !== 5'b0)) begin
             q[i_write_index - 1] <= i_write_data;
         end

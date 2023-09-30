@@ -7,7 +7,6 @@ module alu (
     input wire i_cmp_sig,
 
     output wire [31:0] o_result
-    //output wire o_lt, o_eq, o_gt
 );
     // sign-extend to 33 bits, allows consolidating the comparison operations
     // i.e. slt a < b -> a - b < 0
@@ -38,7 +37,4 @@ module alu (
                       ({31'b0, i_op_sel[1] & lt}) |
                       ({32{i_op_sel[2]}} & bool_result) |
                       ({32{i_op_sel[3]}} & shift_result);
-
-    //assign o_eq =~| add_result[32:0];
-    //assign o_gt = !o_lt && !o_eq;
 endmodule

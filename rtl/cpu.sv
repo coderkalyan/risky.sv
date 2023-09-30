@@ -17,63 +17,76 @@ module cpu (
     end
 
     // decode stage
-    wire [31:0] rs1, rs2;
+    wire [4:0] rs1, rs2, rd;
     wire [31:0] imm;
-    wire [31:0] write_data;
-    wire write_enable;
-    decode_stage decoder (
-        .i_clk(i_clk),
+    wire [3:0] alu_op_sel;
+    wire alu_sub;
+    wire [1:0] alu_bool_op;
+    wire alu_shift_dir, alu_a_sel, alu_b_sel;
+    wire cmp_sig;
+    wire [1:0] br_type;
+    wire cond_br;
+    wire jump;
+    wire mem_we;
+    wire [1:0] load_size;
+    wire load_sig;
+    wire [2:0] wb_sel;
+    wire wb_we;
+    decoder decoder (
         .i_inst(i_inst),
-        .i_write_data(write_data),
-        .i_write_enable(write_enable),
-        .o_read1(rs1),
-        .o_read2(rs2),
-        .o_imm(imm)
+        .o_rs1(rs1), .o_rs2(rs2), .o_rd(rd),
+        .o_imm(imm),
+        .o_alu_op_sel(alu_op_sel),
+        .o_alu_sub(alu_sub),
+        .o_alu_bool_op(alu_bool_op),
+        .o_alu_shift_dir(alu_shift_dir),
+        .o_alu_a_sel(alu_a_sel), .o_alu_b_sel(alu_b_sel),
+        .o_cmp_sig(cmp_sig),
+        .o_br_type(br_type),
+        .o_cond_br(cond_br),
+        .o_jump(jump),
+        .o_mem_we(mem_we),
+        .o_load_size(load_size),
+        .o_load_sig(load_sig),
+        .o_wb_sel(wb_sel),
+        .o_wb_we(wb_we)
     );
-    assign write_enable = !(decoder.ty[S] || decoder.ty[B]);
+    assign pc_sel = (cond_br && br_taken) || jump;
 
-    assign pc_sel = (decoder.ty[B] && br_taken) || decoder.ty[J] || (opcode === 7'b1100111);
+    wire [31:0] rs1_data, rs2_data;
+    wire [31:0] wb_data;
+    register_file rf (
+        .i_clk(i_clk),
+        .i_write_index(rd), .i_write_data(wb_data), .i_write_enable(wb_we),
+        .i_read_index1(rs1), .o_read_data1(rs1_data),
+        .i_read_index2(rs2), .o_read_data2(rs2_data)
+    );
 
     // execute stage
-    wire [6:0] opcode = i_inst[6:0];
-    wire [3:0] f3 = i_inst[14:12];
-    wire [6:0] f7 = i_inst[31:25];
-
-    wire sub = f7[5] && decoder.ty[R]; // TODO: srai
-    wire [1:0] bool_op = f3[1:0];
-    wire [3:0] op_sel;
-    assign op_sel[0] = !decoder.ty[R] || (f3[2:0] === 3'b000);
-    assign op_sel[1] = f3[2:1] === 2'b01;
-    assign op_sel[2] = (f3[2] === 1'b1) && (f3[1:0] !== 2'b01);
-    assign op_sel[3] = (decoder.ty[R] || (opcode[6:4] === 3'b001)) && f3[1:0] === 2'b01;
-    wire shift_dir = f3[2];
-    wire a_sel = decoder.ty[B] || decoder.ty[J]; // TODO: auipc
-    wire b_sel = !decoder.ty[R];
-    wire cmp_sig = decoder.ty[B] ? f3[1] : f3[0];
-
+    wire [31:0] op_a = alu_a_sel ? pc : rs1_data;
+    wire [31:0] op_b = alu_b_sel ? imm : rs2_data;
     wire [31:0] alu_result;
     alu alu (
-        .i_op_a(a_sel ? pc : rs1),
-        .i_op_b(b_sel ? imm : rs2),
-        .i_sub(sub),
-        .i_bool_op(bool_op),
-        .i_op_sel(op_sel),
-        .i_shift_dir(shift_dir),
+        .i_op_a(op_a),
+        .i_op_b(op_b),
+        .i_sub(alu_sub),
+        .i_bool_op(alu_bool_op),
+        .i_op_sel(alu_op_sel),
+        .i_shift_dir(alu_shift_dir),
         .i_cmp_sig(cmp_sig),
         .o_result(alu_result)
     );
 
     wire cmp_lt, cmp_eq, cmp_gt;
     branch_comparator cmp (
-        .i_op_a(rs1),
-        .i_op_b(rs2),
+        .i_op_a(rs1_data),
+        .i_op_b(rs2_data),
         .i_cmp_sig(cmp_sig),
         .o_lt(cmp_lt),
         .o_eq(cmp_eq),
         .o_gt(cmp_gt)
     );
 
-    wire [1:0] br_type = {f3[2], f3[0]};
     assign br_taken =   (br_type === 2'b00) ? cmp_eq :
                         (br_type === 2'b01) ? !cmp_eq :
                         (br_type === 2'b10) ? cmp_lt :
@@ -81,28 +94,23 @@ module cpu (
 
     // memory stage
     wire [31:0] mem_addr, mem_mask;
-    wire [4:0] load_size = f3[1:0];
     wire [4:0] shift_amount = (alu_result & 32'h3) << 3;
-    rw_mask mask (.i_addr(alu_result), .i_size(load_size[1:0]), .o_addr(mem_addr), .o_mask(mem_mask));
+    rw_mask mask (.i_addr(alu_result), .i_size(load_size), .o_addr(mem_addr), .o_mask(mem_mask));
 
     wire [31:0] raw_read;
     sim_pdmem dmem (
         .i_clk(i_clk),
         .i_addr(mem_addr),
-        .i_write_data(rs2 << shift_amount),
-        .i_write_enable(decoder.ty[S]),
+        .i_write_data(rs2_data << shift_amount),
+        .i_write_enable(mem_we),
         .i_write_mask(mem_mask),
         .o_read_data(raw_read)
     );
     wire signed [31:0] masked_read = raw_read & mem_mask;
-    wire [31:0] aligned_read = f3[2] ? (masked_read >> shift_amount) : (masked_read >>> shift_amount);
+    wire [31:0] aligned_read = load_sig ? (masked_read >>> shift_amount) : (masked_read >> shift_amount);
 
     // write back stage
-    wire [2:0] wb_sel;
-    assign wb_sel[0] = decoder.ty[R] || (opcode[6:4] === 3'b001) || decoder.ty[U]; // || decoder.ty[J] || (opcode === 7'b1100111);
-    assign wb_sel[1] = opcode[6:4] === 3'b000;
-    assign wb_sel[2] = decoder.ty[J] || (opcode === 7'b1100111);
-    assign write_data = (wb_sel[0]) ? alu_result : 
-                        (wb_sel[1]) ? aligned_read :
-                        (pc + 4);
+    assign wb_data = (wb_sel[0]) ? alu_result : 
+                     (wb_sel[1]) ? aligned_read :
+                     (pc + 4);
 endmodule

@@ -17,3 +17,5 @@ rw_mask_test:
 cpu_test:
 	iverilog -g2005-sv -c cmd/cpu.txt test/cpu_tb.sv -o build/cpu_tb
 	./build/cpu_tb
+
+test: register_file_test decode_stage_test alu_test rw_mask_test cpu_test
