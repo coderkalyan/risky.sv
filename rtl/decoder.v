@@ -82,7 +82,7 @@ module decoder (
    assign o_alu_op_sel[3] = opcode_arith && (func_sl || func_sr);
 
    assign o_alu_sub = opcode_arith && f7[5]; // TODO: srai
-   assign o_bool_op = f3[1:0];
+   assign o_alu_bool_op = f3[1:0];
    assign o_alu_shift_dir = func_sr;
    assign o_alu_a_sel = opcode_branch || opcode_jal || opcode_auipc;
    assign o_alu_b_sel = !opcode_arith;
