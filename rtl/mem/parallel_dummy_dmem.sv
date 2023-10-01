@@ -9,6 +9,7 @@ module sim_pdmem (
 );
     // 2K words of memory
     logic [31:0] q [2047:0];
+    // logic [31:0] q [0:0];
     always @(posedge i_clk) begin
         if (i_write_enable) begin
             q[i_addr] <= (i_write_data & i_write_mask) | (q[i_addr] & ~i_write_mask);

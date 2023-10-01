@@ -1,2 +1,2 @@
-rtl/imm_gen.sv
+rtl/immediate_generator.v
 rtl/decoder.v

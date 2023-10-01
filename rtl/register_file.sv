@@ -16,6 +16,8 @@ module register_file (
         if (i_write_enable && (i_write_index !== 5'b0)) begin
             q[i_write_index - 1] <= i_write_data;
         end
+        //o_read_data1 <= (i_read_index1 !== 5'd0) ? q[i_read_index1 - 1] : 32'b0;
+        //o_read_data2 <= (i_read_index2 !== 5'd0) ? q[i_read_index2 - 1] : 32'b0;
     end
 
     assign o_read_data1 = (i_read_index1 !== 5'd0) ? q[i_read_index1 - 1] : 32'b0;

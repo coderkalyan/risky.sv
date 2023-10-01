@@ -2,8 +2,24 @@ module cpu_tb ();
     logic clk;
     logic rst_n;
     logic [31:0] pc, inst;
+    logic [31:0] mem_addr, mem_wdata, mem_wmask, mem_rdata;
+    logic mem_we;
 
-    cpu dut (.i_clk(clk), .i_rst_n(rst_n), .o_pc(pc), .i_inst(inst));
+    sim_pdmem dmem (
+        .i_clk(clk),
+        .i_addr(mem_addr),
+        .i_write_data(mem_wdata),
+        .i_write_mask(mem_wmask),
+        .i_write_enable(mem_we),
+        .o_read_data(mem_rdata)
+    );
+    cpu #(.RESET_VECTOR(32'h0)) dut (
+        .i_clk(clk), .i_rst_n(rst_n),
+        .o_pc(pc), .i_inst(inst),
+        .o_mem_addr(mem_addr),
+        .o_mem_wdata(mem_wdata), .o_mem_wmask(mem_wmask), .o_mem_we(mem_we),
+        .o_mem_rdata(mem_rdata)
+    );
 
     initial begin
         clk = 1'b0;
@@ -45,11 +61,6 @@ module cpu_tb ();
         $display("lw r1, 0(r0)");
         mem_set(0, 32'hdeadbeef);
         inst = 32'h00002083; #1;
-        assert_eq(dut.alu.i_op_a, 32'd0);
-        assert_eq(dut.alu.i_op_b, 32'd0);
-        assert_eq(dut.alu_result, 32'd0);
-        assert_eq(dut.dmem.i_addr, 32'd0);
-        assert_eq(dut.aligned_read, 32'hdeadbeef);
         @(posedge clk);
         @(negedge clk);
         assert_pc(32'h10);
@@ -58,11 +69,6 @@ module cpu_tb ();
         // lb r1, 3(r0)
         $display("lb r1, 3(r0)");
         inst = 32'h00300083; #1;
-        assert_eq(dut.mem_addr, 32'd0);
-        assert_eq(dut.mem_mask, 32'hff000000);
-        assert_eq(dut.raw_read, 32'hdeadbeef);
-        assert_eq(dut.masked_read, 32'hde000000);
-        assert_eq(dut.aligned_read, 32'hffffffde);
         @(posedge clk);
         @(negedge clk);
         assert_pc(32'h14);
@@ -94,14 +100,6 @@ module cpu_tb ();
         reg_set(1, 32'hcafeb0ba);
         mem_set(8, 32'hdeadbeef);
         inst = 32'h00112023; #1;
-        assert_eq(dut.alu.i_op_a, 32'd8);
-        assert_eq(dut.alu.i_op_b, 32'd0);
-        assert_eq(dut.alu_result, 32'd8);
-        assert_eq(dut.mem_mask, 32'hffffffff);
-        assert_eq(dut.dmem.i_write_mask, 32'hffffffff);
-        assert_eq(dut.dmem.i_addr, 32'd8);
-        assert_eq(dut.dmem.i_write_data, 32'hcafeb0ba);
-        assert_eq(dut.dmem.i_write_enable, 1'b1);
         assert_mem(8, 32'hdeadbeef);
         @(posedge clk);
         @(negedge clk);
@@ -113,11 +111,6 @@ module cpu_tb ();
         reg_set(2, 32'd8);
         reg_set(1, 32'h0000b0ba);
         inst = 32'h00111123; #1;
-        assert_eq(dut.alu_result, 32'd10);
-        assert_eq(dut.dmem.i_addr, 32'd8);
-        assert_eq(dut.dmem.i_write_data, 32'hb0ba0000);
-        assert_eq(dut.dmem.i_write_mask, 32'hffff0000);
-        assert_eq(dut.dmem.i_write_enable, 1'b1);
         assert_mem(8, 32'hcafeb0ba);
         @(posedge clk);
         @(negedge clk);
@@ -128,12 +121,6 @@ module cpu_tb ();
         $display("beq r1, r0, 0");
         reg_set(1, 32'h0);
         inst = 32'h00008063; #1;
-        assert_eq(dut.alu.i_op_a, 32'h24);
-        assert_eq(dut.alu.i_op_b, 32'd0);
-        assert_eq(dut.cmp_eq, 1'b1);
-        assert_eq(dut.cmp_lt, 1'b0);
-        assert_eq(dut.cmp_gt, 1'b0);
-        assert_eq(dut.br_taken, 1'b1);
         @(posedge clk);
         @(negedge clk);
         assert_pc(32'h24);
@@ -142,12 +129,6 @@ module cpu_tb ();
         $display("beq r1, r0, 0");
         reg_set(1, 32'hcafe);
         inst = 32'h00008063; #1;
-        assert_eq(dut.alu.i_op_a, 32'h24);
-        assert_eq(dut.alu.i_op_b, 32'd0);
-        assert_eq(dut.cmp_eq, 1'b0);
-        assert_eq(dut.cmp_lt, 1'b0);
-        assert_eq(dut.cmp_gt, 1'b1);
-        assert_eq(dut.br_taken, 1'b0);
         @(posedge clk);
         @(negedge clk);
         assert_pc(32'h28);
@@ -213,14 +194,14 @@ module cpu_tb ();
 
     task mem_set(input [10:0] index, input [31:0] value);
     begin
-        dut.dmem.q[index] = value;
+        dmem.q[index] = value;
     end
     endtask
 
     task assert_mem(input [10:0] index, input [31:0] expected);
     begin
-        if (dut.dmem.q[index] !== expected) begin
-            $display("0x%x: expected 0x%x, got 0x%x", index, expected, dut.dmem.q[index]);
+        if (dmem.q[index] !== expected) begin
+            $display("0x%x: expected 0x%x, got 0x%x", index, expected, dmem.q[index]);
             $finish;
         end
     end

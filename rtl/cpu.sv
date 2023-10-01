@@ -1,8 +1,15 @@
-module cpu (
+module cpu #(
+    parameter RESET_VECTOR = 32'h80000000
+) (
     input wire i_clk,
     input wire i_rst_n,
     output wire [31:0] o_pc,
-    input wire [31:0] i_inst
+    input wire [31:0] i_inst,
+    output wire [31:0] o_mem_addr,
+    output wire [31:0] o_mem_wdata,
+    output wire [31:0] o_mem_wmask,
+    output wire o_mem_we,
+    input wire [31:0] o_mem_rdata
 );
     // fetch stage
     wire br_taken, pc_sel; // these will be filled in later down
@@ -98,14 +105,11 @@ module cpu (
     rw_mask mask (.i_addr(alu_result), .i_size(load_size), .o_addr(mem_addr), .o_mask(mem_mask));
 
     wire [31:0] raw_read;
-    sim_pdmem dmem (
-        .i_clk(i_clk),
-        .i_addr(mem_addr),
-        .i_write_data(rs2_data << shift_amount),
-        .i_write_enable(mem_we),
-        .i_write_mask(mem_mask),
-        .o_read_data(raw_read)
-    );
+    assign o_mem_addr = mem_addr;
+    assign o_mem_wdata = rs2_data << shift_amount;
+    assign o_mem_wmask = mem_mask;
+    assign o_mem_we = mem_we;
+    assign raw_read = o_mem_rdata;
     wire signed [31:0] masked_read = raw_read & mem_mask;
     wire [31:0] aligned_read = load_sig ? (masked_read >>> shift_amount) : (masked_read >> shift_amount);
 
