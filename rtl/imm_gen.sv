@@ -1,5 +1,3 @@
-enum {R, I, S, B, U, J} inst_type;
-
 module immediate_generator (
     input wire [31:0] i_inst,
     input wire i_format_i,
