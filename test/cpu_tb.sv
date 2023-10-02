@@ -36,8 +36,35 @@ module cpu_tb ();
         inst = 32'h018280b3; #1;
         @(posedge clk);
         @(negedge clk);
+        inst = 32'h3e800093; #1;
+        assert_eq(dut.id_inst, 32'h018280b3);
+        assert_eq(dut.id_pc, 32'h0);
+        assert_eq(dut.rs1, 32'd5);
+        assert_eq(dut.rs2, 32'd24);
+        assert_eq(dut.rs1_data, 32'd3);
+        assert_eq(dut.rs2_data, 32'd5);
         assert_pc(32'h4);
+        @(posedge clk);
+        @(negedge clk);
+        assert_eq(dut.ex_rs1_data, 32'd3);
+        assert_eq(dut.ex_rs2_data, 32'd5);
+        assert_eq(dut.alu_result, 32'd8);
+        assert_pc(32'h8);
+        @(posedge clk);
+        @(negedge clk);
+        assert_eq(dut.mem_alu_result, 32'd8);
+        assert_eq(dut.mem_wb_sel, 3'b001);
+        assert_eq(dut.mem_wb_we, 1'b1);
+        assert_pc(32'hc);
+        @(posedge clk);
+        @(negedge clk);
+        assert_eq(dut.wb_data, 32'd8);
+        assert_eq(dut.wb_rd, 32'd1);
+        assert_pc(32'h10);
+        @(posedge clk);
+        @(negedge clk);
         assert_reg(1, 32'd8);
+        assert_pc(32'h14);
 
         // sra r1, r2, r3
         $display("sra r1, r2, r3");
@@ -46,7 +73,12 @@ module cpu_tb ();
         inst = 32'h403150b3;
         @(posedge clk);
         @(negedge clk);
-        assert_pc(32'h8);
+        inst = 32'h3e800093;
+        repeat (4) begin
+            @(posedge clk);
+            @(negedge clk);
+        end
+        assert_pc(32'h28);
         assert_reg(1, 32'hFFFFFFF8);
 
         // addi r3, r18, 1234

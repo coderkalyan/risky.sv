@@ -23,6 +23,13 @@ module cpu #(
         end
     end
 
+    logic [31:0] id_inst;
+    logic [31:0] id_pc;
+    always_ff @(posedge i_clk) begin
+        id_inst <= i_inst;
+        id_pc <= pc;
+    end
+
     // decode stage
     wire [4:0] rs1, rs2, rd;
     wire [31:0] imm;
@@ -40,7 +47,7 @@ module cpu #(
     wire [2:0] wb_sel;
     wire wb_we;
     decoder decoder (
-        .i_inst(i_inst),
+        .i_inst(id_inst),
         .o_rs1(rs1), .o_rs2(rs2), .o_rd(rd),
         .o_imm(imm),
         .o_alu_op_sel(alu_op_sel),
@@ -61,26 +68,60 @@ module cpu #(
     assign pc_sel = (cond_br && br_taken) || jump;
 
     wire [31:0] rs1_data, rs2_data;
-    wire [31:0] wb_data;
+    logic [31:0] wb_data;
+    logic [4:0] wb_rd;
+    logic wb_wb_we;
     register_file rf (
         .i_clk(i_clk),
-        .i_write_index(rd), .i_write_data(wb_data), .i_write_enable(wb_we),
+        .i_write_index(wb_rd), .i_write_data(wb_data), .i_write_enable(wb_wb_we),
         .i_read_index1(rs1), .o_read_data1(rs1_data),
         .i_read_index2(rs2), .o_read_data2(rs2_data)
     );
 
+    logic [4:0] ex_rd;
+    logic [31:0] ex_rs1_data, ex_rs2_data, ex_imm;
+    logic [31:0] ex_pc;
+    logic [3:0] ex_alu_op_sel;
+    logic ex_alu_sub;
+    logic [1:0] ex_alu_bool_op;
+    logic ex_alu_shift_dir, ex_alu_a_sel, ex_alu_b_sel, ex_cmp_sig;
+    logic ex_mem_we;
+    logic [1:0] ex_load_size;
+    logic ex_load_sig;
+    logic [2:0] ex_wb_sel;
+    logic ex_wb_we;
+    always_ff @(posedge i_clk) begin
+        ex_rd <= rd;
+        ex_rs1_data <= rs1_data;
+        ex_rs2_data <= rs2_data;
+        ex_imm <= imm;
+        ex_pc <= id_pc;
+        ex_alu_op_sel <= alu_op_sel;
+        ex_alu_sub <= alu_sub;
+        ex_alu_bool_op <= alu_bool_op;
+        ex_alu_shift_dir <= alu_shift_dir;
+        ex_alu_a_sel <= alu_a_sel;
+        ex_alu_b_sel <= alu_b_sel;
+        ex_cmp_sig <= cmp_sig;
+        ex_mem_we <= mem_we;
+        ex_load_size <= load_size;
+        ex_load_sig <= load_sig;
+        ex_wb_sel <= wb_sel;
+        ex_wb_we <= wb_we;
+    end
+
     // execute stage
-    wire [31:0] op_a = alu_a_sel ? pc : rs1_data;
-    wire [31:0] op_b = alu_b_sel ? imm : rs2_data;
+    wire [31:0] op_a = ex_alu_a_sel ? pc : ex_rs1_data;
+    wire [31:0] op_b = ex_alu_b_sel ? imm : ex_rs2_data;
     wire [31:0] alu_result;
     alu alu (
         .i_op_a(op_a),
         .i_op_b(op_b),
-        .i_sub(alu_sub),
-        .i_bool_op(alu_bool_op),
-        .i_op_sel(alu_op_sel),
-        .i_shift_dir(alu_shift_dir),
-        .i_cmp_sig(cmp_sig),
+        .i_sub(ex_alu_sub),
+        .i_bool_op(ex_alu_bool_op),
+        .i_op_sel(ex_alu_op_sel),
+        .i_shift_dir(ex_alu_shift_dir),
+        .i_cmp_sig(ex_cmp_sig),
         .o_result(alu_result)
     );
 
@@ -94,27 +135,67 @@ module cpu #(
         .o_gt(cmp_gt)
     );
 
+    // TODO
     assign br_taken =   (br_type === 2'b00) ? cmp_eq :
                         (br_type === 2'b01) ? !cmp_eq :
                         (br_type === 2'b10) ? cmp_lt :
                         cmp_gt;
 
+    logic [31:0] mem_alu_result;
+    logic [31:0] mem_rs2_data;
+    logic mem_mem_we;
+    logic [1:0] mem_load_size;
+    logic mem_load_sig;
+    logic [2:0] mem_wb_sel;
+    logic mem_wb_we;
+    logic mem_rd;
+    always_ff @(posedge i_clk) begin
+        mem_alu_result <= alu_result;
+        mem_rs2_data <= ex_rs2_data;
+        mem_mem_we <= ex_mem_we;
+        mem_load_size <= ex_load_size;
+        mem_load_sig <= ex_load_sig;
+        mem_wb_sel <= ex_wb_sel;
+        mem_wb_we <= ex_wb_we;
+        mem_rd <= ex_rd;
+    end
+
     // memory stage
     wire [31:0] mem_addr, mem_mask;
-    wire [4:0] shift_amount = (alu_result & 32'h3) << 3;
-    rw_mask mask (.i_addr(alu_result), .i_size(load_size), .o_addr(mem_addr), .o_mask(mem_mask));
+    wire [4:0] shift_amount = (mem_alu_result & 32'h3) << 3;
+    rw_mask mask (.i_addr(mem_alu_result), .i_size(mem_load_size), .o_addr(mem_addr), .o_mask(mem_mask));
 
-    wire [31:0] raw_read;
     assign o_mem_addr = mem_addr;
-    assign o_mem_wdata = rs2_data << shift_amount;
+    assign o_mem_wdata = mem_rs2_data << shift_amount;
     assign o_mem_wmask = mem_mask;
-    assign o_mem_we = mem_we;
-    assign raw_read = o_mem_rdata;
-    wire signed [31:0] masked_read = raw_read & mem_mask;
-    wire [31:0] aligned_read = load_sig ? (masked_read >>> shift_amount) : (masked_read >> shift_amount);
+    assign o_mem_we = mem_mem_we;
+    wire signed [31:0] masked_read = o_mem_rdata & mem_mask;
+    wire [31:0] aligned_read = mem_load_sig ? (masked_read >>> shift_amount) : (masked_read >> shift_amount);
+
+    always_ff @(posedge i_clk) begin
+        wb_data <=  (mem_wb_sel[0]) ? mem_alu_result : 
+                    (mem_wb_sel[1]) ? aligned_read :
+                    (pc + 4); // TODO: wrong pc
+        wb_rd <= mem_rd;
+        wb_wb_we <= mem_wb_we;
+    end
+    // logic [2:0] wb_wb_sel;
+    // logic wb_wb_we;
+    // logic [31:0] wb_alu_result, wb_aligned_read;
+    // logic [31:0] wb_rd;
+    // always_ff @(posedge i_clk) begin
+    //     wb_wb_sel <= mem_wb_sel;
+    //     wb_wb_we <= mem_wb_we;
+    //     wb_alu_result <= mem_alu_result;
+    //     wb_aligned_read <= aligned_read;
+    //     wb_rd <= mem_rd;
+    // end
 
     // write back stage
-    assign wb_data = (wb_sel[0]) ? alu_result : 
-                     (wb_sel[1]) ? aligned_read :
-                     (pc + 4);
+    // always_ff @(posedge i_clk) begin
+        // wbc_rd <= wb_rd;
+    // end
+    // assign wb_data = (mem_wb_sel[0]) ? alu_result : 
+    //                  (mem_wb_sel[1]) ? aligned_read :
+    //                  (pc + 4);
 endmodule
