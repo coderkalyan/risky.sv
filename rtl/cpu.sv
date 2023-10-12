@@ -3,30 +3,36 @@ module cpu #(
 ) (
     input wire i_clk,
     input wire i_rst_n,
-    output wire [31:0] o_pc,
-    input wire [31:0] i_inst,
+    output wire [31:0] o_inst_raddr,
+    output wire o_inst_re,
+    input wire [31:0] i_inst_rdata,
     output wire [31:0] o_mem_addr,
     output wire [31:0] o_mem_wdata,
     output wire [31:0] o_mem_wmask,
     output wire o_mem_we,
     input wire [31:0] o_mem_rdata
 );
+    typedef enum {STAGE_IF, STAGE_ID, STAGE_EX, STAGE_MEM, STAGE_WB} stage_t;
+    logic [4:0] stall = 5'b0;
+
     // fetch stage
-    wire br_taken, pc_sel; // these will be filled in later down
-    logic [31:0] pc;
-    assign o_pc = pc;
-    always_ff @(posedge i_clk, negedge i_rst_n) begin
-        if (!i_rst_n) begin
-            pc <= 32'h0;
-        end else begin
-            pc <= pc_sel ? alu_result : (pc + 4);
-        end
-    end
+    wire pc_sel;
+    wire [31:0] alu_result;
+    wire [31:0] pc, inst;
+    inst_fetch #(.RESET_VECTOR(RESET_VECTOR)) fetch (
+        .i_clk(i_clk), .i_rst_n(i_rst_n),
+        .i_stall(1'b0), .i_jump(pc_sel), .i_jdest(alu_result),
+        .o_raddr(o_inst_raddr),
+        .o_re(o_inst_re),
+        .i_rdata(i_inst_rdata),
+        .o_pc(pc),
+        .o_inst(inst)
+    );
 
     logic [31:0] id_inst;
     logic [31:0] id_pc;
     always_ff @(posedge i_clk) begin
-        id_inst <= i_inst;
+        id_inst <= inst;
         id_pc <= pc;
     end
 
@@ -111,9 +117,8 @@ module cpu #(
     end
 
     // execute stage
-    wire [31:0] op_a = ex_alu_a_sel ? pc : ex_rs1_data;
-    wire [31:0] op_b = ex_alu_b_sel ? imm : ex_rs2_data;
-    wire [31:0] alu_result;
+    wire [31:0] op_a = ex_alu_a_sel ? ex_pc : ex_rs1_data;
+    wire [31:0] op_b = ex_alu_b_sel ? ex_imm : ex_rs2_data;
     alu alu (
         .i_op_a(op_a),
         .i_op_b(op_b),
@@ -141,6 +146,7 @@ module cpu #(
                         (br_type === 2'b10) ? cmp_lt :
                         cmp_gt;
 
+    logic [31:0] mem_pc;
     logic [31:0] mem_alu_result;
     logic [31:0] mem_rs2_data;
     logic mem_mem_we;
@@ -148,8 +154,9 @@ module cpu #(
     logic mem_load_sig;
     logic [2:0] mem_wb_sel;
     logic mem_wb_we;
-    logic mem_rd;
+    logic [4:0] mem_rd;
     always_ff @(posedge i_clk) begin
+        mem_pc <= ex_pc;
         mem_alu_result <= alu_result;
         mem_rs2_data <= ex_rs2_data;
         mem_mem_we <= ex_mem_we;
@@ -175,27 +182,8 @@ module cpu #(
     always_ff @(posedge i_clk) begin
         wb_data <=  (mem_wb_sel[0]) ? mem_alu_result : 
                     (mem_wb_sel[1]) ? aligned_read :
-                    (pc + 4); // TODO: wrong pc
+                    (mem_pc + 4); // TODO: wrong pc
         wb_rd <= mem_rd;
         wb_wb_we <= mem_wb_we;
     end
-    // logic [2:0] wb_wb_sel;
-    // logic wb_wb_we;
-    // logic [31:0] wb_alu_result, wb_aligned_read;
-    // logic [31:0] wb_rd;
-    // always_ff @(posedge i_clk) begin
-    //     wb_wb_sel <= mem_wb_sel;
-    //     wb_wb_we <= mem_wb_we;
-    //     wb_alu_result <= mem_alu_result;
-    //     wb_aligned_read <= aligned_read;
-    //     wb_rd <= mem_rd;
-    // end
-
-    // write back stage
-    // always_ff @(posedge i_clk) begin
-        // wbc_rd <= wb_rd;
-    // end
-    // assign wb_data = (mem_wb_sel[0]) ? alu_result : 
-    //                  (mem_wb_sel[1]) ? aligned_read :
-    //                  (pc + 4);
 endmodule

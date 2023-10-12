@@ -1,6 +1,8 @@
 -c decoder.txt
 -c register_file.txt
 -c alu.txt
+rtl/types.sv
+rtl/inst_fetch.sv
 rtl/mem/parallel_dummy_dmem.sv
 rtl/mem/rw_mask.sv
 rtl/branch_comparator.sv

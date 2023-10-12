@@ -1,3 +1,5 @@
+import types::alu_op_t;
+
 module decoder (
     input wire [31:0] i_inst,
 

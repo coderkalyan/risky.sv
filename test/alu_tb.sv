@@ -4,7 +4,6 @@ module alu_tb ();
     logic [1:0] bool_op;
     logic [3:0] op_sel;
     logic shift_dir, cmp_sig;
-    logic [2:0] cmp;
 
     alu dut (
         .i_op_a(op_a),
@@ -14,8 +13,7 @@ module alu_tb ();
         .i_op_sel(op_sel),
         .i_shift_dir(shift_dir),
         .i_cmp_sig(cmp_sig),
-        .o_result(result),
-        .o_lt(cmp[1]), .o_eq(cmp[2]), .o_gt(cmp[0])
+        .o_result(result)
     );
 
     task assert_add(input [31:0] a, input [31:0] b);
